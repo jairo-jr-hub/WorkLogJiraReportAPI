@@ -1,76 +1,32 @@
 let globalIssuesData = [];
+
 let activeGroups = ['tipo', 'issue'];
 let currentWorklogs = [];
 let currentDates = [];
+let modalData = {};
 
-window.addEventListener('DOMContentLoaded', () => {
-    const today = new Date();
-    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+document.getElementById('jsonFile').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
     
-    document.getElementById('dateTo').value = today.toISOString().split('T')[0];
-    document.getElementById('dateFrom').value = firstDay.toISOString().split('T')[0];
-});
-
-document.getElementById('btnGenerate').addEventListener('click', async function() {
-    const email = document.getElementById('jiraEmail').value.trim();
-    const token = document.getElementById('jiraToken').value.trim();
-    const fromStr = document.getElementById('dateFrom').value;
-    const toStr = document.getElementById('dateTo').value;
-    const statusMsg = document.getElementById('statusMsg');
-
-    if (!token) {
-        alert("Por favor, insira seu API Token do Jira.");
-        return;
-    }
-    if (!fromStr || !toStr) {
-        alert("Preencha as datas Inicial e Final.");
-        return;
-    }
-
-    statusMsg.innerText = "Buscando dados no Jira...";
-    document.getElementById('btnGenerate').disabled = true;
-
-    const auth = btoa(`${email}:${token}`);
-    const jql = `worklogDate >= "${fromStr}" AND worklogDate <= "${toStr}"`;
-
-    const bodyData = {
-        jql: jql,
-        maxResults: 1000,
-        fields: ["summary", "project", "issuetype", "worklog"]
-    };
-
-    try {
-        const response = await fetch("https://guaranisistemas.atlassian.net/rest/api/3/search/jql", {
-            method: 'POST',
-            headers: {
-                'Authorization': `Basic ${auth}`,
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(bodyData)
-        });
-
-        if (!response.ok) {
-            throw new Error(`Erro ${response.status}: Acesso bloqueado. Verifique seu Token e se a extensão CORS está ativa no navegador.`);
+    document.getElementById('fileName').innerText = file.name;
+    
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+        try {
+            const data = JSON.parse(evt.target.result);
+            if (!data.issues) throw new Error("O arquivo não possui o formato esperado do Jira.");
+            globalIssuesData = data.issues;
+            
+            initDatesAndRender();
+        } catch (err) {
+            alert("Erro ao ler arquivo: " + err.message);
         }
-
-        const data = await response.json();
-        globalIssuesData = data.issues;
-        
-        statusMsg.innerText = "Dados carregados com sucesso!";
-        
-        applyFilters(email, fromStr, toStr);
-        
-        setTimeout(() => { statusMsg.innerText = ""; }, 3000);
-        
-    } catch (err) {
-        console.error(err);
-        statusMsg.innerText = "Falha na requisição.";
-        alert(err.message);
-    } finally {
-        document.getElementById('btnGenerate').disabled = false;
-    }
+    };
+    reader.readAsText(file);
 });
+
+document.getElementById('btnGenerate').addEventListener('click', applyFilters);
 
 function renderGroupByUI() {
     const container = document.getElementById('groupByTags');
@@ -109,31 +65,101 @@ document.getElementById('addGroupSelect').addEventListener('change', function(e)
     }
 });
 
-function applyFilters(emailTarget, fromStr, toStr) {
-    if (!globalIssuesData || globalIssuesData.length === 0) {
-        document.getElementById('reportContainer').innerHTML = "<div class='empty-msg'>Nenhum dado retornado do Jira para esse período.</div>";
-        document.getElementById('groupBySection').style.display = 'none';
-        return;
-    }
+function initDatesAndRender() {
+    let minD = '9999-12-31';
+    let maxD = '0000-01-01';
+    let found = false;
 
-    currentWorklogs = [];
-    
     globalIssuesData.forEach(issue => {
         if (!issue.fields.worklog || !issue.fields.worklog.worklogs) return;
         
         issue.fields.worklog.worklogs.forEach(wl => {
-            const email = wl.author.emailAddress ? wl.author.emailAddress.toLowerCase() : "";
-            if (email === emailTarget.toLowerCase()) {
-                const d = wl.started.split('T')[0];
-                if (d >= fromStr && d <= toStr) {
-                    currentWorklogs.push({
-                        issueKey: issue.key,
-                        type: issue.fields.issuetype.name,
-                        typeIcon: issue.fields.issuetype.iconUrl,
-                        date: d,
-                        sec: wl.timeSpentSeconds
-                    });
+            const d = wl.started.split('T')[0];
+            if (d < minD) minD = d;
+            if (d > maxD) maxD = d;
+            found = true;
+        });
+    });
+
+    if (found) {
+        document.getElementById('dateFrom').value = minD;
+        document.getElementById('dateTo').value = maxD;
+    }
+    
+    applyFilters();
+}
+
+function extractComment(doc) {
+    if (!doc || !doc.content) return "-";
+    let text = "";
+    doc.content.forEach(block => {
+        if (block.type === 'paragraph' && block.content) {
+            block.content.forEach(inline => {
+                if (inline.type === 'text') text += inline.text;
+            });
+            text += " "; 
+        }
+    });
+    return text.trim() || "-";
+}
+
+function applyFilters() {
+    if (globalIssuesData.length === 0) {
+        alert("Carregue o JSON primeiro.");
+        return;
+    }
+
+    const fromStr = document.getElementById('dateFrom').value;
+    const toStr = document.getElementById('dateTo').value;
+
+    if (!fromStr || !toStr) {
+        alert("Datas inválidas.");
+        return;
+    }
+
+    currentWorklogs = [];
+    modalData = {};
+
+    globalIssuesData.forEach(issue => {
+        if (!issue.fields.worklog || !issue.fields.worklog.worklogs) return;
+        
+        // Identificação inteligente do Ticket Pai (caso seja subtarefa ou mencione outro ERP no sumário)
+        let pKey = null;
+        if (issue.fields.parent && issue.fields.parent.key) {
+            pKey = issue.fields.parent.key;
+        } else {
+            // Procura por padrões como [ERP-23820] ou ERP-23820 no sumário
+            const matches = issue.fields.summary.match(/ERP-\d+/g);
+            if (matches) {
+                // Pega o primeiro ERP encontrado que seja diferente da própria issue atual
+                const foundParent = matches.find(m => m !== issue.key);
+                if (foundParent) {
+                    pKey = foundParent;
                 }
+            }
+        }
+        
+        issue.fields.worklog.worklogs.forEach(wl => {
+            const d = wl.started.split('T')[0];
+            
+            if (d >= fromStr && d <= toStr) {
+                const wlObj = {
+                    issueKey: issue.key,
+                    parentKey: pKey,
+                    summary: issue.fields.summary || "Sem Título",
+                    type: issue.fields.issuetype.name,
+                    typeIcon: issue.fields.issuetype.iconUrl,
+                    date: d,
+                    sec: wl.timeSpentSeconds,
+                    timeSpent: wl.timeSpent,
+                    started: wl.started,
+                    comment: extractComment(wl.comment)
+                };
+                
+                currentWorklogs.push(wlObj);
+
+                if (!modalData[issue.key]) modalData[issue.key] = [];
+                modalData[issue.key].push(wlObj);
             }
         });
     });
@@ -141,7 +167,7 @@ function applyFilters(emailTarget, fromStr, toStr) {
     const reportContainer = document.getElementById('reportContainer');
 
     if (currentWorklogs.length === 0) {
-        reportContainer.innerHTML = "<div class='empty-msg'>Você não possui apontamentos nesse período.</div>";
+        reportContainer.innerHTML = "<div class='empty-msg'>Nenhum apontamento encontrado nesse período.</div>";
         document.getElementById('groupBySection').style.display = 'none';
         return;
     }
@@ -165,15 +191,15 @@ function applyFilters(emailTarget, fromStr, toStr) {
     renderHTML();
 }
 
+const btnIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>`;
+
 function renderHTML() {
     if (activeGroups.length === 0) {
         document.getElementById('reportContainer').innerHTML = "<div class='empty-msg'>Selecione pelo menos um campo no 'Group By' para visualizar a tabela.</div>";
         return;
     }
 
-    let html = `<div class="table-wrapper"><table><thead>`;
-    
-    html += `<tr>`;
+    let html = `<div class="table-wrapper"><table><thead><tr>`;
     
     let stickyHtml = '';
     if (activeGroups.length === 2) {
@@ -227,7 +253,7 @@ function renderHTML() {
             if (!grp.issues[wl.issueKey]) {
                 const daily = {};
                 currentDates.forEach(d => daily[d] = 0);
-                grp.issues[wl.issueKey] = { total: 0, daily: daily };
+                grp.issues[wl.issueKey] = { total: 0, daily: daily, summary: wl.summary, parentKey: wl.parentKey };
             }
             
             if (grp.issues[wl.issueKey].daily[wl.date] !== undefined) {
@@ -252,17 +278,22 @@ function renderHTML() {
                             <span class="text-content" title="${typeName}">${typeName}</span>
                         </div>
                     </td>`;
+                    
                     html += `<td rowspan="${issueKeys.length}" class="sticky-col col-total col-yellow text-bold" data-sticky-idx="1">
                         ${formatSeconds(grp.total)}
                     </td>`;
                 }
                 
+                // UX Tooltip refinado: exibe o pai (se houver) + o título do ticket ao passar o mouse
+                const tooltipText = iss.parentKey ? `[${iss.parentKey}] ${iss.summary}` : iss.summary;
+
                 html += `<td class="sticky-col col-auto bg-white col-issue-cell" data-sticky-idx="2">
                     <div class="flex-align">
-                        <a href="https://guaranisistemas.atlassian.net/browse/${key}" target="_blank">
+                        <a href="https://guaranisistemas.atlassian.net/browse/${key}" target="_blank" title="${tooltipText}">
                             <img src="${grp.icon}" onerror="this.style.display='none'"> 
                         </a>
-                        <a href="https://guaranisistemas.atlassian.net/browse/${key}" target="_blank">${key}</a>
+                        <a href="https://guaranisistemas.atlassian.net/browse/${key}" target="_blank" title="${tooltipText}">${key}</a>
+                        <button class="btn-details" onclick="openModal('${key}')" title="Ver detalhes">${btnIcon}</button>
                     </div>
                 </td>`;
                 html += `<td class="sticky-col col-total col-yellow sticky-last-col text-bold" data-sticky-idx="3">${formatSeconds(iss.total)}</td>`;
@@ -284,7 +315,7 @@ function renderHTML() {
             if (!issues[wl.issueKey]) {
                 const daily = {};
                 currentDates.forEach(d => daily[d] = 0);
-                issues[wl.issueKey] = { total: 0, icon: wl.typeIcon, daily: daily };
+                issues[wl.issueKey] = { total: 0, icon: wl.typeIcon, daily: daily, summary: wl.summary, parentKey: wl.parentKey };
             }
             if (issues[wl.issueKey].daily[wl.date] !== undefined) {
                 issues[wl.issueKey].daily[wl.date] += wl.sec;
@@ -295,12 +326,16 @@ function renderHTML() {
         Object.keys(issues).sort().forEach(key => {
             const iss = issues[key];
             html += `<tr>`;
+            
+            const tooltipText = iss.parentKey ? `[${iss.parentKey}] ${iss.summary}` : iss.summary;
+
             html += `<td class="sticky-col col-auto bg-white col-issue-cell" data-sticky-idx="0">
                 <div class="flex-align">
-                    <a href="https://guaranisistemas.atlassian.net/browse/${key}" target="_blank">
+                    <a href="https://guaranisistemas.atlassian.net/browse/${key}" target="_blank" title="${tooltipText}">
                         <img src="${iss.icon}" onerror="this.style.display='none'"> 
                     </a>
-                    <a href="https://guaranisistemas.atlassian.net/browse/${key}" target="_blank">${key}</a>
+                    <a href="https://guaranisistemas.atlassian.net/browse/${key}" target="_blank" title="${tooltipText}">${key}</a>
+                    <button class="btn-details" onclick="openModal('${key}')" title="Ver detalhes">${btnIcon}</button>
                 </div>
             </td>`;
             html += `<td class="sticky-col col-total col-yellow sticky-last-col text-bold" data-sticky-idx="1">${formatSeconds(iss.total)}</td>`;
@@ -347,7 +382,6 @@ function renderHTML() {
         });
     }
 
-    // Fechamento do Corpo e Início do Footer
     html += `</tbody><tfoot><tr class="tfoot-total">`;
     
     if (activeGroups.length === 2) {
@@ -367,20 +401,16 @@ function renderHTML() {
     html += `<td class="filler-col"></td></tr></tfoot></table></div>`;
     document.getElementById('reportContainer').innerHTML = html;
 
-    // A mágica para ajustar os `left` das colunas sticky
     setTimeout(applyStickyOffsets, 50);
 }
 
 function applyStickyOffsets() {
     const table = document.querySelector('.table-wrapper table');
     if (!table) return;
-
     const firstRow = table.querySelector('thead tr:first-child');
     if (!firstRow) return;
-
     const numStickyCols = activeGroups.length * 2;
     let currentLeft = 0;
-
     for (let i = 0; i < numStickyCols; i++) {
         const th = firstRow.querySelector(`th[data-sticky-idx="${i}"]`);
         if (th) {
@@ -413,4 +443,112 @@ function getMonthYearBR(dateStr) {
     const d = new Date(dateStr + 'T12:00:00');
     const months = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
     return `${months[d.getMonth()]}, ${d.getFullYear()}`;
+}
+
+// ================= LÓGICA DO MODAL =================
+window.openModal = function(issueKey) {
+    const worklogs = modalData[issueKey];
+    if (!worklogs || worklogs.length === 0) return;
+
+    const issueSummary = worklogs[0].summary;
+    const parentKey = worklogs[0].parentKey;
+
+    // Constrói o cabeçalho no padrão visual de breadcrumb do Jira (Pai / Filho) com destaque limpo
+    let titleHtml = '';
+    if (parentKey) {
+        titleHtml = `<a href="https://guaranisistemas.atlassian.net/browse/${parentKey}" target="_blank" style="color: #5e6c84; text-decoration: none; font-weight: 500; font-size: 16px;">${parentKey}</a> <span style="color: #97a0af; margin: 0 4px; font-weight: 300;">/</span> `;
+    }
+    titleHtml += `<a href="https://guaranisistemas.atlassian.net/browse/${issueKey}" target="_blank" style="color: #0052cc; text-decoration: none; font-weight: 600;">${issueKey}</a>`;
+
+    document.getElementById('modalTitle').innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div style="display: flex; align-items: center; font-size: 20px; line-height: 1.2;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0052cc" stroke-width="2" style="margin-right: 10px; flex-shrink: 0;">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                    <polyline points="15 3 21 3 21 9"></polyline>
+                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
+                <div style="display: flex; align-items: center; flex-wrap: wrap;">
+                    ${titleHtml}
+                </div>
+            </div>
+            <div style="font-size: 14px; color: #5e6c84; font-weight: normal; margin-left: 32px; line-height: 1.4;">
+                ${issueSummary}
+            </div>
+        </div>
+    `;
+    
+    const tbody = document.getElementById('modalTableBody');
+    const tfoot = document.getElementById('modalTableFoot');
+    
+    tbody.innerHTML = '';
+    tfoot.innerHTML = '';
+
+    worklogs.sort((a, b) => new Date(a.started) - new Date(b.started));
+
+    let totalSec = 0;
+    const daysOfWeek = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+
+    worklogs.forEach(wl => {
+        const startDate = new Date(wl.started);
+        const endDate = new Date(startDate.getTime() + (wl.sec * 1000));
+        
+        const wd = daysOfWeek[startDate.getDay()];
+        const dateStr = `${wd}, ${startDate.toLocaleDateString('pt-BR')}`;
+        
+        const startTime = startDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        const endTime = endDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+        totalSec += wl.sec;
+
+        tbody.innerHTML += `
+            <tr>
+                <td>${dateStr}</td>
+                <td>${startTime}</td>
+                <td>${endTime}</td>
+                <td>${wl.timeSpent}</td>
+                <td>${wl.comment}</td>
+            </tr>
+        `;
+    });
+
+    tfoot.innerHTML = `
+        <tr>
+            <td colspan="3" style="text-align: right; border-top: 2px solid #dfe1e6; position: sticky; bottom: 0; background-color: #f4f5f7;">Total</td>
+            <td style="border-top: 2px solid #dfe1e6; position: sticky; bottom: 0; background-color: #f4f5f7;">${formatSeconds(totalSec) || '0h'}</td>
+            <td style="border-top: 2px solid #dfe1e6; position: sticky; bottom: 0; background-color: #f4f5f7;"></td>
+        </tr>
+    `;
+
+    const modal = document.getElementById('worklogModal');
+    modal.style.display = 'flex';
+    modal.style.justifyContent = 'center';
+    modal.style.alignItems = 'flex-start';
+    modal.style.paddingTop = '10vh';
+
+    const modalContent = document.querySelector('.modal-content');
+    if (modalContent) {
+        modalContent.style.margin = '0'; 
+        modalContent.style.maxHeight = '80vh';
+        modalContent.style.display = 'grid';
+        modalContent.style.gridTemplateRows = 'auto 1fr';
+        modalContent.style.overflow = 'hidden'; 
+    }
+
+    const modalBody = document.querySelector('.modal-body');
+    if (modalBody) {
+        modalBody.style.overflowY = 'auto';
+        modalBody.style.paddingRight = '4px';
+    }
+}
+
+window.closeModal = function() {
+    document.getElementById('worklogModal').style.display = 'none';
+}
+
+window.onclick = function(event) {
+    const modal = document.getElementById('worklogModal');
+    if (event.target === modal) {
+        modal.style.display = 'none';
+    }
 }
