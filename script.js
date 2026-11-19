@@ -422,8 +422,12 @@ function applyFilters() {
         if (!issue.fields.worklog || !issue.fields.worklog.worklogs) return;
         
         let pKey = null;
+        let pIcon = null;
         if (issue.fields.parent && issue.fields.parent.key) {
             pKey = issue.fields.parent.key;
+            if (issue.fields.parent.fields && issue.fields.parent.fields.issuetype) {
+                pIcon = issue.fields.parent.fields.issuetype.iconUrl;
+            }
         } else {
             const matches = (issue.fields.summary || "").match(/ERP-\d+/g);
             if (matches) {
@@ -441,6 +445,7 @@ function applyFilters() {
                 const wlObj = {
                     issueKey: issue.key,
                     parentKey: pKey,
+                    parentIcon: pIcon,
                     summary: issue.fields.summary || "Sem Título",
                     type: issue.fields.issuetype.name,
                     typeIcon: issue.fields.issuetype.iconUrl,
@@ -853,23 +858,29 @@ window.openModal = function(issueKey) {
 
     const issueSummary = worklogs[0].summary;
     const parentKey = worklogs[0].parentKey;
+    const parentIcon = worklogs[0].parentIcon;
+    const typeIcon = worklogs[0].typeIcon;
 
-    let keysHtml = '';
+    let breadcrumbHtml = '';
     if (parentKey) {
-        keysHtml += `<a href="https://guaranisistemas.atlassian.net/browse/${parentKey}" target="_blank" class="modal-parent-badge" title="Abrir Ticket Pai">${parentKey}</a>`;
-        keysHtml += `<span class="modal-breadcrumb-sep">/</span>`;
+        breadcrumbHtml += `
+            <a href="https://guaranisistemas.atlassian.net/browse/${parentKey}" target="_blank" class="jira-crumb-item" title="Abrir Ticket Pai">
+                ${parentIcon ? `<img src="${parentIcon}" class="jira-crumb-icon" onerror="this.style.display='none'">` : ''}
+                <span>${parentKey}</span>
+            </a>
+            <span class="jira-crumb-sep">/</span>
+        `;
     }
-    keysHtml += `<a href="https://guaranisistemas.atlassian.net/browse/${issueKey}" target="_blank" class="modal-issue-link" title="Abrir Ticket">${issueKey}</a>`;
+
+    breadcrumbHtml += `
+        <a href="https://guaranisistemas.atlassian.net/browse/${issueKey}" target="_blank" class="jira-crumb-item jira-crumb-current" title="Abrir Ticket">
+            ${typeIcon ? `<img src="${typeIcon}" class="jira-crumb-icon" onerror="this.style.display='none'">` : ''}
+            <span>${issueKey}</span>
+        </a>
+    `;
 
     document.getElementById('modalTitle').innerHTML = `
-        <div class="modal-title-row">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0052cc" stroke-width="2.2" style="flex-shrink: 0;">
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                <polyline points="15 3 21 3 21 9"></polyline>
-                <line x1="10" y1="14" x2="21" y2="3"></line>
-            </svg>
-            <div class="modal-keys-group">${keysHtml}</div>
-        </div>
+        <div class="jira-breadcrumb">${breadcrumbHtml}</div>
         <div class="modal-summary-highlight">${issueSummary}</div>
     `;
     
