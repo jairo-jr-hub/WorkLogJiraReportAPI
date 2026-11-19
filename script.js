@@ -19,6 +19,12 @@ let modalData = {};
 document.getElementById('btnFetchJira').addEventListener('click', async function() {
     const fromStr = document.getElementById('dateFrom').value;
     const toStr = document.getElementById('dateTo').value;
+    const userStr = document.getElementById('jiraUser').value.trim();
+
+    if (!userStr) {
+        alert("Informe o nome ou e-mail do usuário no Jira.");
+        return;
+    }
 
     if (!fromStr || !toStr) {
         alert("Selecione a data inicial e final.");
@@ -38,7 +44,8 @@ document.getElementById('btnFetchJira').addEventListener('click', async function
             },
             body: JSON.stringify({
                 dateFrom: fromStr,
-                dateTo: toStr
+                dateTo: toStr,
+                user: userStr
             })
         });
 
@@ -65,7 +72,7 @@ document.getElementById('btnFetchJira').addEventListener('click', async function
     }
 });
 
-// ================= CARREGAMENTO VIA JSON (FALLBACK) =================
+// ================= CARREGAMENTO VIA JSON (FALLBACK OFFLINE) =================
 document.getElementById('jsonFile').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -112,7 +119,7 @@ function renderGroupByUI() {
 window.removeGroup = function(g) {
     activeGroups = activeGroups.filter(x => x !== g);
     renderGroupByUI();
-    if(currentWorklogs.length > 0) renderHTML();
+    if (currentWorklogs.length > 0) renderHTML();
 };
 
 document.getElementById('addGroupSelect').addEventListener('change', function(e) {
@@ -122,7 +129,7 @@ document.getElementById('addGroupSelect').addEventListener('change', function(e)
             activeGroups = ['tipo', 'issue'];
         }
         renderGroupByUI();
-        if(currentWorklogs.length > 0) renderHTML();
+        if (currentWorklogs.length > 0) renderHTML();
     }
 });
 
@@ -172,6 +179,7 @@ function applyFilters() {
 
     const fromStr = document.getElementById('dateFrom').value;
     const toStr = document.getElementById('dateTo').value;
+    const selectedUser = document.getElementById('jiraUser').value.trim().toLowerCase();
 
     if (!fromStr || !toStr) {
         alert("Datas inválidas.");
@@ -200,6 +208,15 @@ function applyFilters() {
         
         issue.fields.worklog.worklogs.forEach(wl => {
             const d = wl.started.split('T')[0];
+
+            // Filtra para somar apenas os apontamentos do usuário selecionado
+            if (selectedUser && wl.author) {
+                const authorName = (wl.author.displayName || "").toLowerCase();
+                const authorEmail = (wl.author.emailAddress || "").toLowerCase();
+                if (authorName !== selectedUser && authorEmail !== selectedUser) {
+                    return;
+                }
+            }
             
             if (d >= fromStr && d <= toStr) {
                 const wlObj = {
@@ -226,7 +243,7 @@ function applyFilters() {
     const reportContainer = document.getElementById('reportContainer');
 
     if (currentWorklogs.length === 0) {
-        reportContainer.innerHTML = "<div class='empty-msg'>Nenhum apontamento encontrado nesse período.</div>";
+        reportContainer.innerHTML = "<div class='empty-msg'>Nenhum apontamento encontrado para esse usuário/período.</div>";
         document.getElementById('groupBySection').style.display = 'none';
         return;
     }
