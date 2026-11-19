@@ -460,6 +460,7 @@ function applyFilters() {
                     sec: wl.timeSpentSeconds,
                     timeSpent: wl.timeSpent,
                     started: wl.started,
+                    startedMs: new Date(wl.started).getTime(),
                     comment: extractComment(wl.comment)
                 };
                 
@@ -562,7 +563,15 @@ function renderHTML() {
             if (!grp.issues[wl.issueKey]) {
                 const daily = {};
                 currentDates.forEach(d => daily[d] = 0);
-                grp.issues[wl.issueKey] = { total: 0, daily: daily, summary: wl.summary, parentKey: wl.parentKey };
+                grp.issues[wl.issueKey] = {
+                    total: 0,
+                    daily: daily,
+                    summary: wl.summary,
+                    parentKey: wl.parentKey,
+                    firstStarted: wl.startedMs
+                };
+            } else if (wl.startedMs < grp.issues[wl.issueKey].firstStarted) {
+                grp.issues[wl.issueKey].firstStarted = wl.startedMs;
             }
             
             if (grp.issues[wl.issueKey].daily[wl.date] !== undefined) {
@@ -574,7 +583,8 @@ function renderHTML() {
 
         Object.keys(groups).sort().forEach(typeName => {
             const grp = groups[typeName];
-            const issueKeys = Object.keys(grp.issues).sort();
+            // Ordena as issues pela data/hora de início do primeiro apontamento no período
+            const issueKeys = Object.keys(grp.issues).sort((a, b) => grp.issues[a].firstStarted - grp.issues[b].firstStarted);
             
             issueKeys.forEach((key, idx) => {
                 const iss = grp.issues[key];
@@ -623,7 +633,16 @@ function renderHTML() {
             if (!issues[wl.issueKey]) {
                 const daily = {};
                 currentDates.forEach(d => daily[d] = 0);
-                issues[wl.issueKey] = { total: 0, icon: wl.typeIcon, daily: daily, summary: wl.summary, parentKey: wl.parentKey };
+                issues[wl.issueKey] = {
+                    total: 0,
+                    icon: wl.typeIcon,
+                    daily: daily,
+                    summary: wl.summary,
+                    parentKey: wl.parentKey,
+                    firstStarted: wl.startedMs
+                };
+            } else if (wl.startedMs < issues[wl.issueKey].firstStarted) {
+                issues[wl.issueKey].firstStarted = wl.startedMs;
             }
             if (issues[wl.issueKey].daily[wl.date] !== undefined) {
                 issues[wl.issueKey].daily[wl.date] += wl.sec;
@@ -631,29 +650,32 @@ function renderHTML() {
             issues[wl.issueKey].total += wl.sec;
         });
 
-        Object.keys(issues).sort().forEach(key => {
-            const iss = issues[key];
-            html += `<tr>`;
-            const dataAttrs = `data-key="${escapeAttr(key)}" data-parent="${escapeAttr(iss.parentKey || '')}" data-summary="${escapeAttr(iss.summary)}"`;
+        // Ordena todas as issues pela data/hora de início do primeiro apontamento
+        Object.keys(issues)
+            .sort((a, b) => issues[a].firstStarted - issues[b].firstStarted)
+            .forEach(key => {
+                const iss = issues[key];
+                html += `<tr>`;
+                const dataAttrs = `data-key="${escapeAttr(key)}" data-parent="${escapeAttr(iss.parentKey || '')}" data-summary="${escapeAttr(iss.summary)}"`;
 
-            html += `<td class="sticky-col col-auto bg-white col-issue-cell" data-sticky-idx="0">
-                <div class="flex-align">
-                    <a href="https://guaranisistemas.atlassian.net/browse/${key}" target="_blank" class="issue-tooltip-trigger" ${dataAttrs}>
-                        <img src="${iss.icon}" onerror="this.style.display='none'"> 
-                    </a>
-                    <a href="https://guaranisistemas.atlassian.net/browse/${key}" target="_blank" class="issue-link issue-tooltip-trigger" ${dataAttrs}>${key}</a>
-                    <button type="button" class="btn-details" onclick="openModal('${key}')" title="Ver detalhes">${btnIcon}</button>
-                </div>
-            </td>`;
-            html += `<td class="sticky-col col-total col-yellow sticky-last-col text-bold" data-sticky-idx="1">${formatSeconds(iss.total)}</td>`;
-            currentDates.forEach(d => {
-                const sec = iss.daily[d];
-                columnTotals[d] += sec;
-                html += `<td class="day-col bg-white">${formatSeconds(sec)}</td>`;
+                html += `<td class="sticky-col col-auto bg-white col-issue-cell" data-sticky-idx="0">
+                    <div class="flex-align">
+                        <a href="https://guaranisistemas.atlassian.net/browse/${key}" target="_blank" class="issue-tooltip-trigger" ${dataAttrs}>
+                            <img src="${iss.icon}" onerror="this.style.display='none'"> 
+                        </a>
+                        <a href="https://guaranisistemas.atlassian.net/browse/${key}" target="_blank" class="issue-link issue-tooltip-trigger" ${dataAttrs}>${key}</a>
+                        <button type="button" class="btn-details" onclick="openModal('${key}')" title="Ver detalhes">${btnIcon}</button>
+                    </div>
+                </td>`;
+                html += `<td class="sticky-col col-total col-yellow sticky-last-col text-bold" data-sticky-idx="1">${formatSeconds(iss.total)}</td>`;
+                currentDates.forEach(d => {
+                    const sec = iss.daily[d];
+                    columnTotals[d] += sec;
+                    html += `<td class="day-col bg-white">${formatSeconds(sec)}</td>`;
+                });
+                html += `<td class="filler-col"></td></tr>`;
+                grandTotal += iss.total;
             });
-            html += `<td class="filler-col"></td></tr>`;
-            grandTotal += iss.total;
-        });
 
     } else if (activeGroups.length === 1 && activeGroups[0] === 'tipo') {
         const types = {};
@@ -780,8 +802,11 @@ window.exportToExcel = function() {
                 issueKey: wl.issueKey,
                 summary: wl.summary,
                 total: 0,
+                firstStarted: wl.startedMs,
                 daily
             };
+        } else if (wl.startedMs < issueMap[wl.issueKey].firstStarted) {
+            issueMap[wl.issueKey].firstStarted = wl.startedMs;
         }
         if (issueMap[wl.issueKey].daily[wl.date] !== undefined) {
             issueMap[wl.issueKey].daily[wl.date] += wl.sec;
@@ -798,7 +823,7 @@ window.exportToExcel = function() {
     const summaryRows = [summaryHeaders];
 
     Object.values(issueMap)
-        .sort((a, b) => a.type.localeCompare(b.type) || a.issueKey.localeCompare(b.issueKey))
+        .sort((a, b) => a.type.localeCompare(b.type) || a.firstStarted - b.firstStarted)
         .forEach(item => {
             summaryRows.push([
                 item.type,
@@ -819,7 +844,7 @@ window.exportToExcel = function() {
     XLSX.utils.book_append_sheet(wb, wsSummary, "Resumo");
 
     const detailRows = [["Data", "Início", "Fim", "Tipo", "ERP Pai", "Issue", "Descrição", "Tempo", "Comentário"]];
-    const sortedWls = [...currentWorklogs].sort((a, b) => new Date(a.started) - new Date(b.started));
+    const sortedWls = [...currentWorklogs].sort((a, b) => a.startedMs - b.startedMs);
 
     sortedWls.forEach(wl => {
         const startDate = new Date(wl.started);
@@ -892,7 +917,7 @@ window.openModal = function(issueKey) {
     tbody.innerHTML = '';
     tfoot.innerHTML = '';
 
-    worklogs.sort((a, b) => new Date(a.started) - new Date(b.started));
+    worklogs.sort((a, b) => a.startedMs - b.startedMs);
 
     let totalSec = 0;
     const daysOfWeek = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
