@@ -41,13 +41,24 @@ body {
 .form-control:hover { background-color: #ebecf0; }
 .form-control:focus { border-color: #4c9aff; background-color: #ffffff; outline: none; }
 
-.status-msg {
-    font-size: 12px;
-    color: #5e6c84;
-    margin-top: 10px;
+/* BOTÃO DE CARREGAR JSON */
+.btn-load {
+    background-color: #fafbfc;
+    border: 2px dashed #dfe1e6;
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #42526e;
+    cursor: pointer;
     text-align: center;
-    font-weight: 500;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
+.btn-load:hover { background-color: #ebecf0; border-color: #c1c7d0; color: #172b4d; }
+.file-name { font-size: 11px; color: #5e6c84; text-align: center; word-break: break-all; }
 
 .btn-primary {
     background-color: #0052cc;
@@ -62,7 +73,6 @@ body {
     transition: background-color 0.2s;
 }
 .btn-primary:hover { background-color: #0047b3; }
-.btn-primary:disabled { background-color: #a5adba; cursor: not-allowed; }
 
 /* Main Content */
 .main-content {
@@ -154,11 +164,6 @@ th, td {
 }
 
 th:last-child, td:last-child { border-right: none; }
-tfoot td { border-bottom: none; }
-
-/* DIMENSÕES FIXAS PARA AS COLUNAS CONGELADAS */
-.w-240 { width: 240px; }
-.w-100 { width: 100px; }
 
 /* HIERARQUIA DE Z-INDEX */
 thead th { position: sticky; z-index: 10; box-shadow: 0 1px 0 #dfe1e6; }
@@ -169,7 +174,22 @@ thead tr:nth-child(2) th { top: 36px; }
 thead th.sticky-col { z-index: 15; }
 tfoot td.sticky-col { z-index: 15; }
 
-tfoot td { position: sticky; bottom: 0; z-index: 10; background-color: #FAFBFC; box-shadow: 0 -1px 0 #dfe1e6; }
+/* RODAPÉ PRINCIPAL */
+tfoot td { 
+    position: sticky; 
+    bottom: 0; 
+    z-index: 10; 
+    background-color: #FAFBFC;
+    border-top: 2px solid #dfe1e6;
+    border-bottom: none;
+    font-weight: 700;
+    color: #172b4d;
+    box-shadow: 0 -2px 4px rgba(9, 30, 66, 0.05);
+}
+
+tfoot td.sticky-col { background-color: #FAFBFC; }
+tfoot .col-yellow { background-color: #FFE380 !important; color: #172b4d; }
+tfoot td.sticky-col.col-yellow { background-color: #FFE380 !important; }
 
 .sticky-last-col::after {
     content: '';
@@ -186,7 +206,6 @@ tfoot td { position: sticky; bottom: 0; z-index: 10; background-color: #FAFBFC; 
 .month-header { background-color: #DEEBFF; color: #0747A6; font-weight: 600; text-align: center; }
 .bg-white { background-color: #ffffff; }
 .col-yellow { background-color: #FFF0B3; color: #172b4d; }
-tfoot .col-yellow { background-color: #FFE380; }
 
 .col-auto { white-space: nowrap; width: 1%; }
 .col-total { white-space: nowrap; width: 1%; text-align: right; padding-left: 20px; padding-right: 16px; }
@@ -196,10 +215,15 @@ tfoot .col-yellow { background-color: #FFE380; }
     min-width: 55px;
     text-align: center;
     padding: 8px 4px;
+    cursor: default;
+    user-select: none;
+    -webkit-user-select: none;
+    -ms-user-select: none;
 }
 .day-col span { text-transform: capitalize; }
 
 .filler-col { width: auto; background-color: #ffffff; border-left: 1px solid #dfe1e6; }
+tfoot .filler-col { background-color: #FAFBFC; }
 
 .flex-align { display: flex; align-items: center; gap: 8px; justify-content: flex-start; }
 .flex-align img { width: 16px; height: 16px; display: block; flex-shrink: 0; }
@@ -214,11 +238,6 @@ tfoot .col-yellow { background-color: #FFE380; }
 .col-issue a { color: #0052cc; text-decoration: none; cursor: pointer; }
 .col-issue a:hover { text-decoration: underline; }
 
-/* REVESTIMENTO LIMPO NAS LINHAS (HOVER) */
-tbody tr:hover td { background-color: #FAFBFC; }
-tbody tr:hover td.col-yellow { background-color: #fdf5d3; }
-
-/* Classe para setar o negrito focado onde você pediu */
 .text-bold {
     font-weight: 600 !important;
     color: #172b4d;
@@ -238,4 +257,104 @@ tbody tr:hover td.col-yellow { background-color: #fdf5d3; }
     flex-direction: column;
     justify-content: center;
     align-items: center;
+}
+
+/* ================= BOTÃO DO CARD E MODAL ================= */
+.btn-details {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: #5e6c84;
+    padding: 4px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s, color 0.2s;
+    margin-left: 4px;
+}
+.btn-details:hover {
+    background-color: #ebecf0;
+    color: #0052cc;
+}
+
+/* LAYOUT GRID DO MODAL - CORREÇÃO DE CENTRALIZAÇÃO E OVERFLOW */
+.modal {
+    display: none; /* Alterado dinamicamente para 'grid' no JS */
+    position: fixed; 
+    z-index: 1000; 
+    left: 0; top: 0; width: 100%; height: 100%; 
+    background-color: rgba(9, 30, 66, 0.54); 
+    place-items: center; /* Centraliza vertical e horizontalmente */
+}
+.modal-content {
+    background-color: #ffffff;
+    padding: 24px;
+    border-radius: 4px;
+    width: 90%; 
+    max-width: 900px;
+    max-height: 90vh; /* Impede que o card cresça além da tela */
+    display: grid;
+    grid-template-rows: auto 1fr; /* Header automático, corpo rolável */
+    gap: 16px;
+    box-shadow: 0 8px 16px -4px rgba(9, 30, 66, 0.25), 0 0 1px rgba(9, 30, 66, 0.31);
+    animation: modalFadeIn 0.2s ease-out;
+}
+@keyframes modalFadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #dfe1e6;
+    padding-bottom: 12px;
+}
+.modal-header h3 { margin: 0; color: #172b4d; font-size: 18px; display: flex; align-items: center; }
+
+/* Link clicável no título do modal */
+.modal-title-link {
+    color: #0052cc;
+    text-decoration: none;
+}
+.modal-title-link:hover {
+    text-decoration: underline;
+}
+
+.close-btn { cursor: pointer; font-size: 24px; color: #5e6c84; line-height: 1; }
+.close-btn:hover { color: #172b4d; }
+
+.modal-body {
+    overflow-y: auto; /* Adiciona barra de rolagem interna se houver muitos worklogs */
+    padding-right: 4px;
+}
+
+/* Personaliza a barra de rolagem do modal */
+.modal-body::-webkit-scrollbar { width: 6px; }
+.modal-body::-webkit-scrollbar-thumb { background-color: #c1c7d0; border-radius: 4px; }
+
+/* TABELA DO MODAL */
+.modal-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.modal-table th, .modal-table td { 
+    border: 1px solid #dfe1e6; 
+    padding: 10px 12px; 
+    text-align: left; 
+    white-space: nowrap;
+}
+.modal-table td:last-child {
+    white-space: normal; 
+    min-width: 250px;
+}
+.modal-table th { background-color: #f4f5f7; font-weight: 600; color: #5e6c84; position: sticky; top: 0; z-index: 2; box-shadow: 0 1px 0 #dfe1e6;}
+.modal-table td { color: #172b4d; }
+
+/* RODAPÉ DO MODAL (TOTALIZADOR) */
+.modal-table tfoot td {
+    background-color: #f4f5f7;
+    font-weight: 700;
+    color: #172b4d;
+    border-top: 2px solid #dfe1e6;
+    border-bottom: 1px solid #dfe1e6;
+    position: sticky; bottom: 0; z-index: 2;
 }
