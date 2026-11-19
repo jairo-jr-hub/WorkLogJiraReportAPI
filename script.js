@@ -14,31 +14,49 @@ let currentDates = [];
 let modalData = {};
 let currentHeaderMeta = { displayName: "", fromStr: "", toStr: "" };
 
-// ================= DATAS PADRÃO =================
-(function setDefaultDates() {
+const btnIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>`;
+
+// ================= INICIALIZAÇÃO SEGURA =================
+document.addEventListener('DOMContentLoaded', () => {
+    setDefaultDates();
+    initUserCombobox();
+    initCustomTooltip();
+    initEventListeners();
+});
+
+// Preenche data inicial e final com o dia de hoje (fuso local)
+function setDefaultDates() {
     const today = new Date();
-    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-    document.getElementById('dateFrom').value = firstDay.toISOString().split('T')[0];
-    document.getElementById('dateTo').value = today.toISOString().split('T')[0];
-})();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const todayStr = `${yyyy}-${mm}-${dd}`;
+
+    const elFrom = document.getElementById('dateFrom');
+    const elTo = document.getElementById('dateTo');
+    if (elFrom) elFrom.value = todayStr;
+    if (elTo) elTo.value = todayStr;
+}
 
 // ================= COMBOBOX CUSTOMIZADO DE USUÁRIOS =================
-(function initUserCombobox() {
+function initUserCombobox() {
     const input = document.getElementById('jiraUser');
     const dropdown = document.getElementById('userDropdown');
     const btnToggle = document.getElementById('btnToggleUsers');
     const wrapper = document.getElementById('userSelectWrapper');
+
+    if (!input || !dropdown || !btnToggle || !wrapper) return;
 
     function renderList(filterText = "") {
         const term = filterText.trim().toLowerCase();
         const filtered = SAVED_USERS.filter(u => u.toLowerCase().includes(term));
 
         if (filtered.length === 0) {
-            dropdown.innerHTML = `<div class="custom-dropdown-empty">Pressione "Buscar do Jira" para usar este nome</div>`;
+            dropdown.innerHTML = `<div class="custom-dropdown-empty">Clique em "Buscar do Jira" para usar este nome</div>`;
         } else {
             dropdown.innerHTML = filtered.map(u => {
                 const isSelected = u.toLowerCase() === input.value.trim().toLowerCase();
-                return `<div class="custom-dropdown-item ${isSelected ? 'active' : ''}" data-value="${u}">${u}</div>`;
+                return `<div class="custom-dropdown-item ${isSelected ? 'active' : ''}" data-value="${escapeAttr(u)}">${u}</div>`;
             }).join('');
         }
         dropdown.classList.add('open');
@@ -70,11 +88,12 @@ let currentHeaderMeta = { displayName: "", fromStr: "", toStr: "" };
             dropdown.classList.remove('open');
         }
     });
-})();
+}
 
 // ================= TOOLTIP CUSTOMIZADO (ESTILO JIRA) =================
-(function initCustomTooltip() {
+function initCustomTooltip() {
     const tooltip = document.getElementById('customTooltip');
+    if (!tooltip) return;
 
     document.addEventListener('mouseover', (e) => {
         const target = e.target.closest('.issue-tooltip-trigger');
@@ -125,13 +144,46 @@ let currentHeaderMeta = { displayName: "", fromStr: "", toStr: "" };
         tooltip.style.left = `${left}px`;
         tooltip.style.top = `${top}px`;
     }
-})();
+}
+
+// ================= EVENTOS PRINCIPAIS =================
+function initEventListeners() {
+    const btnFetch = document.getElementById('btnFetchJira');
+    if (btnFetch) {
+        btnFetch.addEventListener('click', fetchFromJira);
+    }
+
+    const jsonInput = document.getElementById('jsonFile');
+    if (jsonInput) {
+        jsonInput.addEventListener('change', handleJsonUpload);
+    }
+
+    const btnGenerate = document.getElementById('btnGenerate');
+    if (btnGenerate) {
+        btnGenerate.addEventListener('click', applyFilters);
+    }
+
+    const addGroupSelect = document.getElementById('addGroupSelect');
+    if (addGroupSelect) {
+        addGroupSelect.addEventListener('change', function(e) {
+            if (e.target.value) {
+                activeGroups.push(e.target.value);
+                if (activeGroups.includes('tipo') && activeGroups.includes('issue')) {
+                    activeGroups = ['tipo', 'issue'];
+                }
+                renderGroupByUI();
+                if (currentWorklogs.length > 0) renderHTML();
+            }
+        });
+    }
+}
 
 // ================= BUSCA VIA CLOUDFLARE WORKER (POST) =================
-document.getElementById('btnFetchJira').addEventListener('click', async function() {
+async function fetchFromJira() {
     const fromStr = document.getElementById('dateFrom').value;
     const toStr = document.getElementById('dateTo').value;
-    const userStr = document.getElementById('jiraUser').value.trim();
+    const userEl = document.getElementById('jiraUser');
+    const userStr = userEl ? userEl.value.trim() : "Jairo Antonio dos Santos Junior";
 
     if (!userStr) {
         alert("Informe o nome ou e-mail do usuário no Jira.");
@@ -143,7 +195,7 @@ document.getElementById('btnFetchJira').addEventListener('click', async function
         return;
     }
 
-    const btn = this;
+    const btn = document.getElementById('btnFetchJira');
     const originalText = btn.innerText;
     btn.innerText = "Buscando no Jira...";
     btn.disabled = true;
@@ -170,7 +222,8 @@ document.getElementById('btnFetchJira').addEventListener('click', async function
         }
 
         globalIssuesData = data.issues;
-        document.getElementById('fileName').innerText = `Jira API (${data.issues.length} issues)`;
+        const fileNameEl = document.getElementById('fileName');
+        if (fileNameEl) fileNameEl.innerText = `Jira API (${data.issues.length} issues)`;
         
         applyFilters();
     } catch (err) {
@@ -180,14 +233,15 @@ document.getElementById('btnFetchJira').addEventListener('click', async function
         btn.innerText = originalText;
         btn.disabled = false;
     }
-});
+}
 
 // ================= CARREGAMENTO VIA JSON (FALLBACK OFFLINE) =================
-document.getElementById('jsonFile').addEventListener('change', function(e) {
+function handleJsonUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
     
-    document.getElementById('fileName').innerText = file.name;
+    const fileNameEl = document.getElementById('fileName');
+    if (fileNameEl) fileNameEl.innerText = file.name;
     
     const reader = new FileReader();
     reader.onload = function(evt) {
@@ -195,19 +249,17 @@ document.getElementById('jsonFile').addEventListener('change', function(e) {
             const data = JSON.parse(evt.target.result);
             if (!data.issues) throw new Error("O arquivo não possui o formato esperado do Jira.");
             globalIssuesData = data.issues;
-            
             initDatesAndRender();
         } catch (err) {
             alert("Erro ao ler arquivo: " + err.message);
         }
     };
     reader.readAsText(file);
-});
-
-document.getElementById('btnGenerate').addEventListener('click', applyFilters);
+}
 
 function renderGroupByUI() {
     const container = document.getElementById('groupByTags');
+    if (!container) return;
     container.innerHTML = '';
     
     activeGroups.forEach(g => {
@@ -219,6 +271,7 @@ function renderGroupByUI() {
     });
     
     const select = document.getElementById('addGroupSelect');
+    if (!select) return;
     select.innerHTML = '<option value="">+ Add field...</option>';
     if (!activeGroups.includes('tipo')) select.innerHTML += '<option value="tipo">Tipo de item</option>';
     if (!activeGroups.includes('issue')) select.innerHTML += '<option value="issue">Issue</option>';
@@ -231,17 +284,6 @@ window.removeGroup = function(g) {
     renderGroupByUI();
     if (currentWorklogs.length > 0) renderHTML();
 };
-
-document.getElementById('addGroupSelect').addEventListener('change', function(e) {
-    if (e.target.value) {
-        activeGroups.push(e.target.value);
-        if (activeGroups.includes('tipo') && activeGroups.includes('issue')) {
-            activeGroups = ['tipo', 'issue'];
-        }
-        renderGroupByUI();
-        if (currentWorklogs.length > 0) renderHTML();
-    }
-});
 
 function initDatesAndRender() {
     let minD = '9999-12-31';
@@ -292,7 +334,11 @@ function escapeAttr(str) {
 
 function renderReportHeader(fromStr, toStr) {
     const headerEl = document.getElementById('reportHeader');
-    const searchedUser = document.getElementById('jiraUser').value.trim().toLowerCase();
+    if (!headerEl) return;
+
+    const userEl = document.getElementById('jiraUser');
+    const searchedRaw = userEl ? userEl.value.trim() : "";
+    const searchedUser = searchedRaw.toLowerCase();
 
     const matchedWl = currentWorklogs.find(w => w.authorName && w.authorName.toLowerCase() === searchedUser)
         || currentWorklogs.find(w => w.authorName)
@@ -300,7 +346,7 @@ function renderReportHeader(fromStr, toStr) {
 
     const displayName = (matchedWl && matchedWl.authorName)
         ? matchedWl.authorName
-        : (document.getElementById('jiraUser').value.trim() || "Responsável");
+        : (searchedRaw || "Responsável");
     const avatarUrl = (matchedWl && matchedWl.authorAvatar) ? matchedWl.authorAvatar : "";
     const projectName = (matchedWl && matchedWl.projectName) ? matchedWl.projectName : "";
 
@@ -419,16 +465,18 @@ function applyFilters() {
     });
 
     const reportContainer = document.getElementById('reportContainer');
+    const groupBySection = document.getElementById('groupBySection');
+    const reportHeader = document.getElementById('reportHeader');
 
     if (currentWorklogs.length === 0) {
         reportContainer.innerHTML = "<div class='empty-msg'>Nenhum apontamento encontrado para esse usuário/período.</div>";
-        document.getElementById('groupBySection').style.display = 'none';
-        document.getElementById('reportHeader').style.display = 'none';
+        if (groupBySection) groupBySection.style.display = 'none';
+        if (reportHeader) reportHeader.style.display = 'none';
         return;
     }
 
     renderReportHeader(fromStr, toStr);
-    document.getElementById('groupBySection').style.display = 'flex';
+    if (groupBySection) groupBySection.style.display = 'flex';
     renderGroupByUI();
 
     currentDates = [];
@@ -446,8 +494,6 @@ function applyFilters() {
 
     renderHTML();
 }
-
-const btnIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>`;
 
 function renderHTML() {
     if (activeGroups.length === 0) {
@@ -548,7 +594,7 @@ function renderHTML() {
                             <img src="${grp.icon}" onerror="this.style.display='none'"> 
                         </a>
                         <a href="https://guaranisistemas.atlassian.net/browse/${key}" target="_blank" class="issue-link issue-tooltip-trigger" ${dataAttrs}>${key}</a>
-                        <button class="btn-details" onclick="openModal('${key}')" title="Ver detalhes">${btnIcon}</button>
+                        <button type="button" class="btn-details" onclick="openModal('${key}')" title="Ver detalhes">${btnIcon}</button>
                     </div>
                 </td>`;
                 html += `<td class="sticky-col col-total col-yellow sticky-last-col text-bold" data-sticky-idx="3">${formatSeconds(iss.total)}</td>`;
@@ -589,7 +635,7 @@ function renderHTML() {
                         <img src="${iss.icon}" onerror="this.style.display='none'"> 
                     </a>
                     <a href="https://guaranisistemas.atlassian.net/browse/${key}" target="_blank" class="issue-link issue-tooltip-trigger" ${dataAttrs}>${key}</a>
-                    <button class="btn-details" onclick="openModal('${key}')" title="Ver detalhes">${btnIcon}</button>
+                    <button type="button" class="btn-details" onclick="openModal('${key}')" title="Ver detalhes">${btnIcon}</button>
                 </div>
             </td>`;
             html += `<td class="sticky-col col-total col-yellow sticky-last-col text-bold" data-sticky-idx="1">${formatSeconds(iss.total)}</td>`;
@@ -712,7 +758,6 @@ window.exportToExcel = function() {
 
     const wb = XLSX.utils.book_new();
 
-    // Aba 1: Resumo por Issue / Dia
     const issueMap = {};
     let grandTotalSec = 0;
     const dayTotals = {};
@@ -766,7 +811,6 @@ window.exportToExcel = function() {
     const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
     XLSX.utils.book_append_sheet(wb, wsSummary, "Resumo");
 
-    // Aba 2: Detalhamento de todos os apontamentos
     const detailRows = [["Data", "Início", "Fim", "Tipo", "ERP Pai", "Issue", "Descrição", "Tempo", "Comentário"]];
     const sortedWls = [...currentWorklogs].sort((a, b) => new Date(a.started) - new Date(b.started));
 
