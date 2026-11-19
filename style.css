@@ -662,5 +662,5 @@ tfoot .filler-col { background-color: #FAFBFC; }
     .table-wrapper { overflow: visible; border: 1px solid #c1c7d0; box-shadow: none; }
     .sticky-col, thead th, tfoot td { position: static !important; box-shadow: none !important; }
     .sticky-last-col::after { display: none; }
-    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    body, table, th, td { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 }
