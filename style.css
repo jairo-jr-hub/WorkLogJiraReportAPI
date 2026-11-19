@@ -358,3 +358,8 @@ tfoot .filler-col { background-color: #FAFBFC; }
     border-bottom: 1px solid #dfe1e6;
     position: sticky; bottom: 0; z-index: 2;
 }
+
+.btn-primary:disabled {
+    background-color: #a5adba;
+    cursor: not-allowed;
+}
