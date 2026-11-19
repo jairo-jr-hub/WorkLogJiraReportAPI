@@ -10,16 +10,17 @@
     <aside class="sidebar">
         <div class="sidebar-header">
             <h2>Worklog Report</h2>
-            <p>Integração Direta API</p>
+            <p>Export via Insomnia</p>
         </div>
 
         <div class="form-group">
-            <label>E-mail Atlassian</label>
-            <input type="email" id="jiraEmail" class="form-control" value="jairo.junior@guaranisistemas.com.br">
-        </div>
-        <div class="form-group">
-            <label>API Token</label>
-            <input type="password" id="jiraToken" class="form-control" placeholder="Cole seu token aqui...">
+            <label class="btn-load">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-bottom:-3px; margin-right:4px;">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                </svg> Carregar JSON
+                <input type="file" id="jsonFile" accept=".json" style="display: none;">
+            </label>
+            <div id="fileName" class="file-name">Nenhum arquivo selecionado</div>
         </div>
         
         <div class="divider"></div>
@@ -33,9 +34,7 @@
             <input type="date" id="dateTo" class="form-control">
         </div>
 
-        <button id="btnGenerate" class="btn-primary">Buscar e Filtrar</button>
-        
-        <div id="statusMsg" class="status-msg"></div>
+        <button id="btnGenerate" class="btn-primary">Filtrar Período</button>
     </aside>
 
     <main class="main-content">
@@ -59,11 +58,40 @@
                     <polyline points="10 9 9 9 8 9"></polyline>
                 </svg>
                 <br>
-                <b>Pronto para buscar</b><br>
-                Insira seu token, ligue a extensão de CORS e clique em Filtrar.
+                <b>Nenhum dado carregado</b><br>
+                Carregue o arquivo JSON no menu lateral para visualizar o relatório.
             </div>
         </div>
     </main>
+
+    <!-- MODAL DE DETALHES DO WORKLOG -->
+    <div id="worklogModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">Worklogs</h3>
+                <span class="close-btn" onclick="closeModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <table class="modal-table">
+                    <thead>
+                        <tr>
+                            <th>Data</th>
+                            <th>Início</th>
+                            <th>Fim (aprox.)</th>
+                            <th>Tempo</th>
+                            <th>Comentário</th>
+                        </tr>
+                    </thead>
+                    <tbody id="modalTableBody">
+                        <!-- Preenchido via JS -->
+                    </tbody>
+                    <tfoot id="modalTableFoot">
+                        <!-- Totalizador preenchido via JS -->
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
 
     <script src="script.js"></script>
 </body>
