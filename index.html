@@ -4,7 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Jira Worklog Report</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=4">
+    <!-- Biblioteca SheetJS para exportação real em Excel (.xlsx) -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
     <aside class="sidebar">
@@ -15,11 +17,15 @@
 
         <div class="form-group">
             <label>Usuário (Nome ou E-mail no Jira)</label>
-            <input type="text" id="jiraUser" list="usersList" class="form-control" value="Jairo Antonio dos Santos Junior" placeholder="Nome completo ou e-mail">
-            <datalist id="usersList">
-                <option value="Jairo Antonio dos Santos Junior"></option>
-                <option value="Lucas Vieira de Oliveira"></option>
-            </datalist>
+            <div class="custom-select-wrapper" id="userSelectWrapper">
+                <input type="text" id="jiraUser" class="form-control user-input" value="Jairo Antonio dos Santos Junior" placeholder="Digite ou selecione..." autocomplete="off">
+                <button type="button" id="btnToggleUsers" class="select-chevron" title="Listar usuários">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                </button>
+                <div id="userDropdown" class="custom-dropdown"></div>
+            </div>
         </div>
 
         <div class="form-group">
@@ -48,14 +54,12 @@
     </aside>
 
     <main class="main-content">
-        <!-- CABEÇALHO DO RESPONSÁVEL (ESTILO JIRA) -->
+        <!-- CABEÇALHO DO RESPONSÁVEL + BOTÕES DE EXPORTAÇÃO -->
         <div id="reportHeader" class="report-header" style="display: none;"></div>
 
         <div class="group-by-section" id="groupBySection" style="display: none;">
             <div class="group-by-label">Group By</div>
-            <div class="group-by-tags" id="groupByTags">
-                <!-- As tags são renderizadas dinamicamente pelo JS -->
-            </div>
+            <div class="group-by-tags" id="groupByTags"></div>
             <select id="addGroupSelect" class="add-group-select">
                 <option value="">+ Add field...</option>
             </select>
@@ -81,7 +85,7 @@
     <div id="worklogModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3 id="modalTitle">Worklogs</h3>
+                <div id="modalTitle" class="modal-title-container"></div>
                 <span class="close-btn" onclick="closeModal()">×</span>
             </div>
             <div class="modal-body">
@@ -95,17 +99,16 @@
                             <th>Comentário</th>
                         </tr>
                     </thead>
-                    <tbody id="modalTableBody">
-                        <!-- Preenchido via JS -->
-                    </tbody>
-                    <tfoot id="modalTableFoot">
-                        <!-- Totalizador preenchido via JS -->
-                    </tfoot>
+                    <tbody id="modalTableBody"></tbody>
+                    <tfoot id="modalTableFoot"></tfoot>
                 </table>
             </div>
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <!-- TOOLTIP CUSTOMIZADO (ESTILO JIRA) -->
+    <div id="customTooltip" class="custom-tooltip"></div>
+
+    <script src="script.js?v=4"></script>
 </body>
 </html>
