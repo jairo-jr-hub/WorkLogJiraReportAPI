@@ -171,6 +171,49 @@ function extractComment(doc) {
     return text.trim() || "-";
 }
 
+function renderReportHeader(fromStr, toStr) {
+    const headerEl = document.getElementById('reportHeader');
+    const searchedUser = document.getElementById('jiraUser').value.trim().toLowerCase();
+
+    // Busca nos worklogs o autor que bate com o usuário pesquisado; se não achar, usa o primeiro
+    const matchedWl = currentWorklogs.find(w => w.authorName && w.authorName.toLowerCase() === searchedUser)
+        || currentWorklogs.find(w => w.authorName)
+        || null;
+
+    const displayName = (matchedWl && matchedWl.authorName)
+        ? matchedWl.authorName
+        : (document.getElementById('jiraUser').value.trim() || "Responsável");
+    const avatarUrl = (matchedWl && matchedWl.authorAvatar) ? matchedWl.authorAvatar : "";
+    const projectName = (matchedWl && matchedWl.projectName) ? matchedWl.projectName : "";
+
+    const initials = displayName
+        .split(' ')
+        .filter(Boolean)
+        .slice(0, 2)
+        .map(p => p[0].toUpperCase())
+        .join('');
+
+    const fmtDate = (d) => d.split('-').reverse().join('/');
+
+    headerEl.innerHTML = `
+        <div class="jira-avatar-wrap">
+            ${avatarUrl
+                ? `<img src="${avatarUrl}" alt="${displayName}" class="report-header-avatar" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                   <div class="report-header-initials" style="display:none;">${initials}</div>`
+                : `<div class="report-header-initials">${initials}</div>`
+            }
+        </div>
+        <div class="report-header-info">
+            <div class="report-header-top">
+                <h2 class="report-header-title">${displayName}</h2>
+                ${projectName ? `<span class="jira-lozenge">${projectName}</span>` : ''}
+            </div>
+            <span class="report-header-subtitle">Período: ${fmtDate(fromStr)} até ${fmtDate(toStr)}</span>
+        </div>
+    `;
+    headerEl.style.display = 'flex';
+}
+
 function applyFilters() {
     if (globalIssuesData.length === 0) {
         alert("Busque os dados do Jira ou carregue um JSON primeiro.");
@@ -179,7 +222,6 @@ function applyFilters() {
 
     const fromStr = document.getElementById('dateFrom').value;
     const toStr = document.getElementById('dateTo').value;
-    const selectedUser = document.getElementById('jiraUser').value.trim().toLowerCase();
 
     if (!fromStr || !toStr) {
         alert("Datas inválidas.");
@@ -208,15 +250,6 @@ function applyFilters() {
         
         issue.fields.worklog.worklogs.forEach(wl => {
             const d = wl.started.split('T')[0];
-
-            // Filtra para somar apenas os apontamentos do usuário selecionado
-            if (selectedUser && wl.author) {
-                const authorName = (wl.author.displayName || "").toLowerCase();
-                const authorEmail = (wl.author.emailAddress || "").toLowerCase();
-                if (authorName !== selectedUser && authorEmail !== selectedUser) {
-                    return;
-                }
-            }
             
             if (d >= fromStr && d <= toStr) {
                 const wlObj = {
@@ -225,6 +258,11 @@ function applyFilters() {
                     summary: issue.fields.summary || "Sem Título",
                     type: issue.fields.issuetype.name,
                     typeIcon: issue.fields.issuetype.iconUrl,
+                    projectName: (issue.fields.project && issue.fields.project.name) ? issue.fields.project.name : "",
+                    authorName: (wl.author && wl.author.displayName) ? wl.author.displayName : "",
+                    authorAvatar: (wl.author && wl.author.avatarUrls)
+                        ? (wl.author.avatarUrls['48x48'] || wl.author.avatarUrls['32x32'] || wl.author.avatarUrls['24x24'] || "")
+                        : "",
                     date: d,
                     sec: wl.timeSpentSeconds,
                     timeSpent: wl.timeSpent,
@@ -245,9 +283,11 @@ function applyFilters() {
     if (currentWorklogs.length === 0) {
         reportContainer.innerHTML = "<div class='empty-msg'>Nenhum apontamento encontrado para esse usuário/período.</div>";
         document.getElementById('groupBySection').style.display = 'none';
+        document.getElementById('reportHeader').style.display = 'none';
         return;
     }
 
+    renderReportHeader(fromStr, toStr);
     document.getElementById('groupBySection').style.display = 'flex';
     renderGroupByUI();
 
