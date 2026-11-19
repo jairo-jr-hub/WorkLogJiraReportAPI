@@ -1,10 +1,71 @@
-let globalIssuesData = [];
+// ================= CONFIGURAÇÃO DA API =================
+const WORKER_URL = "https://SEU-WORKER.SEU-SUBDOMINIO.workers.dev";
 
+let globalIssuesData = [];
 let activeGroups = ['tipo', 'issue'];
 let currentWorklogs = [];
 let currentDates = [];
 let modalData = {};
 
+// Preenche as datas com o mês atual ao abrir a página
+(function setDefaultDates() {
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    document.getElementById('dateFrom').value = firstDay.toISOString().split('T')[0];
+    document.getElementById('dateTo').value = today.toISOString().split('T')[0];
+})();
+
+// ================= BUSCA VIA CLOUDFLARE WORKER (POST) =================
+document.getElementById('btnFetchJira').addEventListener('click', async function() {
+    const fromStr = document.getElementById('dateFrom').value;
+    const toStr = document.getElementById('dateTo').value;
+
+    if (!fromStr || !toStr) {
+        alert("Selecione a data inicial e final.");
+        return;
+    }
+
+    const btn = this;
+    const originalText = btn.innerText;
+    btn.innerText = "Buscando no Jira...";
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(WORKER_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                dateFrom: fromStr,
+                dateTo: toStr
+            })
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`HTTP ${response.status} - ${errText}`);
+        }
+
+        const data = await response.json();
+        if (!data.issues) {
+            throw new Error("O retorno da API não possui o campo 'issues'.");
+        }
+
+        globalIssuesData = data.issues;
+        document.getElementById('fileName').innerText = `Jira API (${data.issues.length} issues)`;
+        
+        applyFilters();
+    } catch (err) {
+        console.error(err);
+        alert("Erro ao buscar dados do Jira: " + err.message);
+    } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
+});
+
+// ================= CARREGAMENTO VIA JSON (FALLBACK) =================
 document.getElementById('jsonFile').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -105,7 +166,7 @@ function extractComment(doc) {
 
 function applyFilters() {
     if (globalIssuesData.length === 0) {
-        alert("Carregue o JSON primeiro.");
+        alert("Busque os dados do Jira ou carregue um JSON primeiro.");
         return;
     }
 
@@ -123,15 +184,13 @@ function applyFilters() {
     globalIssuesData.forEach(issue => {
         if (!issue.fields.worklog || !issue.fields.worklog.worklogs) return;
         
-        // Identificação inteligente do Ticket Pai (caso seja subtarefa ou mencione outro ERP no sumário)
+        // Identificação inteligente do Ticket Pai
         let pKey = null;
         if (issue.fields.parent && issue.fields.parent.key) {
             pKey = issue.fields.parent.key;
         } else {
-            // Procura por padrões como [ERP-23820] ou ERP-23820 no sumário
-            const matches = issue.fields.summary.match(/ERP-\d+/g);
+            const matches = (issue.fields.summary || "").match(/ERP-\d+/g);
             if (matches) {
-                // Pega o primeiro ERP encontrado que seja diferente da própria issue atual
                 const foundParent = matches.find(m => m !== issue.key);
                 if (foundParent) {
                     pKey = foundParent;
@@ -284,7 +343,6 @@ function renderHTML() {
                     </td>`;
                 }
                 
-                // UX Tooltip refinado: exibe o pai (se houver) + o título do ticket ao passar o mouse
                 const tooltipText = iss.parentKey ? `[${iss.parentKey}] ${iss.summary}` : iss.summary;
 
                 html += `<td class="sticky-col col-auto bg-white col-issue-cell" data-sticky-idx="2">
@@ -453,7 +511,6 @@ window.openModal = function(issueKey) {
     const issueSummary = worklogs[0].summary;
     const parentKey = worklogs[0].parentKey;
 
-    // Constrói o cabeçalho no padrão visual de breadcrumb do Jira (Pai / Filho) com destaque limpo
     let titleHtml = '';
     if (parentKey) {
         titleHtml = `<a href="https://guaranisistemas.atlassian.net/browse/${parentKey}" target="_blank" style="color: #5e6c84; text-decoration: none; font-weight: 500; font-size: 16px;">${parentKey}</a> <span style="color: #97a0af; margin: 0 4px; font-weight: 300;">/</span> `;
