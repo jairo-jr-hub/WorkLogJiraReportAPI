@@ -289,13 +289,20 @@ tfoot td.sticky-col.col-yellow { background-color: #FFE380 !important; }
 .col-yellow { background-color: #FFF0B3; color: #172b4d; }
 
 .col-auto { white-space: nowrap; width: 1%; }
-.col-total { white-space: nowrap; width: 1%; text-align: right; padding-left: 20px; padding-right: 16px; }
+.col-total {
+    white-space: nowrap;
+    width: 1%;
+    text-align: center;
+    padding-left: 16px;
+    padding-right: 16px;
+}
 
 .day-col {
-    width: 55px;
-    min-width: 55px;
+    width: 64px;
+    min-width: 64px;
+    white-space: nowrap;
     text-align: center;
-    padding: 8px 4px;
+    padding: 8px 6px;
     cursor: default;
     user-select: none;
     -webkit-user-select: none;
