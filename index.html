@@ -14,6 +14,15 @@
         </div>
 
         <div class="form-group">
+            <label>Usuário (Nome ou E-mail no Jira)</label>
+            <input type="text" id="jiraUser" list="usersList" class="form-control" value="Jairo Antonio dos Santos Junior" placeholder="Nome completo ou e-mail">
+            <datalist id="usersList">
+                <option value="Jairo Antonio dos Santos Junior"></option>
+                <!-- Adicione outros usuários aqui -->
+            </datalist>
+        </div>
+
+        <div class="form-group">
             <label>Data Inicial (De)</label>
             <input type="date" id="dateFrom" class="form-control">
         </div>
@@ -60,7 +69,7 @@
                 </svg>
                 <br>
                 <b>Nenhum dado carregado</b><br>
-                Selecione o período e clique em <b>Buscar do Jira</b> (ou carregue um arquivo JSON).
+                Escolha o usuário, o período e clique em <b>Buscar do Jira</b> (ou carregue um arquivo JSON).
             </div>
         </div>
     </main>
