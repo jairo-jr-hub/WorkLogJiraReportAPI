@@ -431,6 +431,15 @@ tfoot .filler-col { background-color: #FAFBFC; }
     max-width: 190px;
 }
 
+/* ALINHAMENTO PERFEITO DO ÍCONE DE CARD NA COLUNA ISSUE */
+.col-issue-cell .flex-align {
+    width: 100%;
+}
+.col-issue-cell .btn-details {
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
 .issue-link {
     color: #0052cc;
     text-decoration: none;
@@ -517,7 +526,6 @@ tfoot .filler-col { background-color: #FAFBFC; }
     align-items: center;
     justify-content: center;
     transition: background-color 0.2s, color 0.2s;
-    margin-left: 4px;
 }
 .btn-details:hover {
     background-color: #ebecf0;
@@ -564,42 +572,47 @@ tfoot .filler-col { background-color: #FAFBFC; }
     gap: 10px;
     flex: 1;
 }
-.modal-title-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-.modal-keys-group {
+
+/* BREADCRUMB DO MODAL ESTILO NATIVO DO JIRA */
+.jira-breadcrumb {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 8px;
 }
-.modal-parent-badge {
-    background-color: #deebff;
-    color: #0747a6;
-    font-size: 18px;
-    font-weight: 700;
-    padding: 3px 10px;
-    border-radius: 4px;
+.jira-crumb-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #42526e;
+    font-size: 16px;
+    font-weight: 500;
     text-decoration: none;
-    transition: background-color 0.15s;
+    padding: 2px 4px;
+    border-radius: 3px;
+    transition: background-color 0.15s, color 0.15s;
 }
-.modal-parent-badge:hover {
-    background-color: #b3d4ff;
-}
-.modal-breadcrumb-sep {
-    color: #97a0af;
-    font-size: 20px;
-    font-weight: 300;
-}
-.modal-issue-link {
+.jira-crumb-item:hover {
+    background-color: #ebecf0;
     color: #0052cc;
-    font-size: 20px;
-    font-weight: 700;
-    text-decoration: none;
+    text-decoration: underline;
 }
-.modal-issue-link:hover { text-decoration: underline; }
+.jira-crumb-current {
+    color: #172b4d;
+    font-weight: 600;
+}
+.jira-crumb-icon {
+    width: 16px;
+    height: 16px;
+    display: block;
+    flex-shrink: 0;
+}
+.jira-crumb-sep {
+    color: #8993a4;
+    font-size: 16px;
+    font-weight: 400;
+    user-select: none;
+}
 
 .modal-summary-highlight {
     font-size: 16px;
