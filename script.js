@@ -1,18 +1,130 @@
 // ================= CONFIGURAÇÃO DA API =================
 const WORKER_URL = "https://jira-worklog-proxy.jairo-juniorjj15.workers.dev";
 
+// Lista de usuários rápidos (adicione quantos quiser aqui)
+const SAVED_USERS = [
+    "Jairo Antonio dos Santos Junior",
+    "Lucas Vieira de Oliveira"
+];
+
 let globalIssuesData = [];
 let activeGroups = ['tipo', 'issue'];
 let currentWorklogs = [];
 let currentDates = [];
 let modalData = {};
+let currentHeaderMeta = { displayName: "", fromStr: "", toStr: "" };
 
-// Preenche as datas com o mês atual ao abrir a página
+// ================= DATAS PADRÃO =================
 (function setDefaultDates() {
     const today = new Date();
     const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
     document.getElementById('dateFrom').value = firstDay.toISOString().split('T')[0];
     document.getElementById('dateTo').value = today.toISOString().split('T')[0];
+})();
+
+// ================= COMBOBOX CUSTOMIZADO DE USUÁRIOS =================
+(function initUserCombobox() {
+    const input = document.getElementById('jiraUser');
+    const dropdown = document.getElementById('userDropdown');
+    const btnToggle = document.getElementById('btnToggleUsers');
+    const wrapper = document.getElementById('userSelectWrapper');
+
+    function renderList(filterText = "") {
+        const term = filterText.trim().toLowerCase();
+        const filtered = SAVED_USERS.filter(u => u.toLowerCase().includes(term));
+
+        if (filtered.length === 0) {
+            dropdown.innerHTML = `<div class="custom-dropdown-empty">Pressione "Buscar do Jira" para usar este nome</div>`;
+        } else {
+            dropdown.innerHTML = filtered.map(u => {
+                const isSelected = u.toLowerCase() === input.value.trim().toLowerCase();
+                return `<div class="custom-dropdown-item ${isSelected ? 'active' : ''}" data-value="${u}">${u}</div>`;
+            }).join('');
+        }
+        dropdown.classList.add('open');
+    }
+
+    input.addEventListener('focus', () => renderList(""));
+    input.addEventListener('input', () => renderList(input.value));
+
+    btnToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (dropdown.classList.contains('open')) {
+            dropdown.classList.remove('open');
+        } else {
+            renderList("");
+            input.focus();
+        }
+    });
+
+    dropdown.addEventListener('click', (e) => {
+        const item = e.target.closest('.custom-dropdown-item');
+        if (item) {
+            input.value = item.dataset.value;
+            dropdown.classList.remove('open');
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!wrapper.contains(e.target)) {
+            dropdown.classList.remove('open');
+        }
+    });
+})();
+
+// ================= TOOLTIP CUSTOMIZADO (ESTILO JIRA) =================
+(function initCustomTooltip() {
+    const tooltip = document.getElementById('customTooltip');
+
+    document.addEventListener('mouseover', (e) => {
+        const target = e.target.closest('.issue-tooltip-trigger');
+        if (!target) return;
+
+        const key = target.dataset.key || "";
+        const parent = target.dataset.parent || "";
+        const summary = target.dataset.summary || "";
+
+        let html = `<div class="tooltip-header">`;
+        if (parent) {
+            html += `<span class="tooltip-parent">${parent}</span><span class="tooltip-sep">/</span>`;
+        }
+        html += `<span class="tooltip-key">${key}</span></div>`;
+        html += `<div class="tooltip-summary">${summary}</div>`;
+
+        tooltip.innerHTML = html;
+        tooltip.classList.add('visible');
+        positionTooltip(e);
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (tooltip.classList.contains('visible')) {
+            positionTooltip(e);
+        }
+    });
+
+    document.addEventListener('mouseout', (e) => {
+        const target = e.target.closest('.issue-tooltip-trigger');
+        if (target) {
+            tooltip.classList.remove('visible');
+        }
+    });
+
+    function positionTooltip(e) {
+        const offset = 14;
+        let left = e.clientX + offset;
+        let top = e.clientY + offset;
+
+        const rect = tooltip.getBoundingClientRect();
+        if (left + rect.width > window.innerWidth - 16) {
+            left = e.clientX - rect.width - offset;
+        }
+        if (top + rect.height > window.innerHeight - 16) {
+            top = e.clientY - rect.height - offset;
+        }
+
+        tooltip.style.left = `${left}px`;
+        tooltip.style.top = `${top}px`;
+    }
 })();
 
 // ================= BUSCA VIA CLOUDFLARE WORKER (POST) =================
@@ -39,9 +151,7 @@ document.getElementById('btnFetchJira').addEventListener('click', async function
     try {
         const response = await fetch(WORKER_URL, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 dateFrom: fromStr,
                 dateTo: toStr,
@@ -171,11 +281,19 @@ function extractComment(doc) {
     return text.trim() || "-";
 }
 
+function escapeAttr(str) {
+    return String(str || "")
+        .replace(/&/g, "&")
+        .replace(/"/g, """)
+        .replace(/'/g, "'")
+        .replace(/</g, "<")
+        .replace(/>/g, ">");
+}
+
 function renderReportHeader(fromStr, toStr) {
     const headerEl = document.getElementById('reportHeader');
     const searchedUser = document.getElementById('jiraUser').value.trim().toLowerCase();
 
-    // Busca nos worklogs o autor que bate com o usuário pesquisado; se não achar, usa o primeiro
     const matchedWl = currentWorklogs.find(w => w.authorName && w.authorName.toLowerCase() === searchedUser)
         || currentWorklogs.find(w => w.authorName)
         || null;
@@ -185,6 +303,8 @@ function renderReportHeader(fromStr, toStr) {
         : (document.getElementById('jiraUser').value.trim() || "Responsável");
     const avatarUrl = (matchedWl && matchedWl.authorAvatar) ? matchedWl.authorAvatar : "";
     const projectName = (matchedWl && matchedWl.projectName) ? matchedWl.projectName : "";
+
+    currentHeaderMeta = { displayName, fromStr, toStr };
 
     const initials = displayName
         .split(' ')
@@ -196,19 +316,40 @@ function renderReportHeader(fromStr, toStr) {
     const fmtDate = (d) => d.split('-').reverse().join('/');
 
     headerEl.innerHTML = `
-        <div class="jira-avatar-wrap">
-            ${avatarUrl
-                ? `<img src="${avatarUrl}" alt="${displayName}" class="report-header-avatar" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                   <div class="report-header-initials" style="display:none;">${initials}</div>`
-                : `<div class="report-header-initials">${initials}</div>`
-            }
-        </div>
-        <div class="report-header-info">
-            <div class="report-header-top">
-                <h2 class="report-header-title">${displayName}</h2>
-                ${projectName ? `<span class="jira-lozenge">${projectName}</span>` : ''}
+        <div class="report-header-left">
+            <div class="jira-avatar-wrap">
+                ${avatarUrl
+                    ? `<img src="${avatarUrl}" alt="${escapeAttr(displayName)}" class="report-header-avatar" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                       <div class="report-header-initials" style="display:none;">${initials}</div>`
+                    : `<div class="report-header-initials">${initials}</div>`
+                }
             </div>
-            <span class="report-header-subtitle">Período: ${fmtDate(fromStr)} até ${fmtDate(toStr)}</span>
+            <div class="report-header-info">
+                <div class="report-header-top">
+                    <h2 class="report-header-title">${displayName}</h2>
+                    ${projectName ? `<span class="jira-lozenge">${projectName}</span>` : ''}
+                </div>
+                <span class="report-header-subtitle">Período: ${fmtDate(fromStr)} até ${fmtDate(toStr)}</span>
+            </div>
+        </div>
+        <div class="header-actions">
+            <button type="button" class="btn-export btn-excel" onclick="exportToExcel()" title="Baixar planilha Excel (.xlsx)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="8" y1="13" x2="16" y2="17"></line>
+                    <line x1="16" y1="13" x2="8" y2="17"></line>
+                </svg>
+                Exportar Excel
+            </button>
+            <button type="button" class="btn-export btn-pdf" onclick="exportToPDF()" title="Imprimir ou salvar como PDF">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+                Exportar PDF
+            </button>
         </div>
     `;
     headerEl.style.display = 'flex';
@@ -234,7 +375,6 @@ function applyFilters() {
     globalIssuesData.forEach(issue => {
         if (!issue.fields.worklog || !issue.fields.worklog.worklogs) return;
         
-        // Identificação inteligente do Ticket Pai
         let pKey = null;
         if (issue.fields.parent && issue.fields.parent.key) {
             pKey = issue.fields.parent.key;
@@ -391,7 +531,7 @@ function renderHTML() {
                     html += `<td rowspan="${issueKeys.length}" class="sticky-col col-auto bg-white col-tipo-cell text-bold" data-sticky-idx="0">
                         <div class="flex-align">
                             <img src="${grp.icon}" onerror="this.style.display='none'"> 
-                            <span class="text-content" title="${typeName}">${typeName}</span>
+                            <span class="text-content" title="${escapeAttr(typeName)}">${typeName}</span>
                         </div>
                     </td>`;
                     
@@ -399,15 +539,15 @@ function renderHTML() {
                         ${formatSeconds(grp.total)}
                     </td>`;
                 }
-                
-                const tooltipText = iss.parentKey ? `[${iss.parentKey}] ${iss.summary}` : iss.summary;
+
+                const dataAttrs = `data-key="${escapeAttr(key)}" data-parent="${escapeAttr(iss.parentKey || '')}" data-summary="${escapeAttr(iss.summary)}"`;
 
                 html += `<td class="sticky-col col-auto bg-white col-issue-cell" data-sticky-idx="2">
                     <div class="flex-align">
-                        <a href="https://guaranisistemas.atlassian.net/browse/${key}" target="_blank" title="${tooltipText}">
+                        <a href="https://guaranisistemas.atlassian.net/browse/${key}" target="_blank" class="issue-tooltip-trigger" ${dataAttrs}>
                             <img src="${grp.icon}" onerror="this.style.display='none'"> 
                         </a>
-                        <a href="https://guaranisistemas.atlassian.net/browse/${key}" target="_blank" title="${tooltipText}">${key}</a>
+                        <a href="https://guaranisistemas.atlassian.net/browse/${key}" target="_blank" class="issue-link issue-tooltip-trigger" ${dataAttrs}>${key}</a>
                         <button class="btn-details" onclick="openModal('${key}')" title="Ver detalhes">${btnIcon}</button>
                     </div>
                 </td>`;
@@ -441,15 +581,14 @@ function renderHTML() {
         Object.keys(issues).sort().forEach(key => {
             const iss = issues[key];
             html += `<tr>`;
-            
-            const tooltipText = iss.parentKey ? `[${iss.parentKey}] ${iss.summary}` : iss.summary;
+            const dataAttrs = `data-key="${escapeAttr(key)}" data-parent="${escapeAttr(iss.parentKey || '')}" data-summary="${escapeAttr(iss.summary)}"`;
 
             html += `<td class="sticky-col col-auto bg-white col-issue-cell" data-sticky-idx="0">
                 <div class="flex-align">
-                    <a href="https://guaranisistemas.atlassian.net/browse/${key}" target="_blank" title="${tooltipText}">
+                    <a href="https://guaranisistemas.atlassian.net/browse/${key}" target="_blank" class="issue-tooltip-trigger" ${dataAttrs}>
                         <img src="${iss.icon}" onerror="this.style.display='none'"> 
                     </a>
-                    <a href="https://guaranisistemas.atlassian.net/browse/${key}" target="_blank" title="${tooltipText}">${key}</a>
+                    <a href="https://guaranisistemas.atlassian.net/browse/${key}" target="_blank" class="issue-link issue-tooltip-trigger" ${dataAttrs}>${key}</a>
                     <button class="btn-details" onclick="openModal('${key}')" title="Ver detalhes">${btnIcon}</button>
                 </div>
             </td>`;
@@ -483,7 +622,7 @@ function renderHTML() {
             html += `<td class="sticky-col col-auto bg-white col-tipo-cell text-bold" data-sticky-idx="0">
                 <div class="flex-align">
                     <img src="${typ.icon}" onerror="this.style.display='none'"> 
-                    <span class="text-content" title="${key}">${key}</span>
+                    <span class="text-content" title="${escapeAttr(key)}">${key}</span>
                 </div>
             </td>`;
             html += `<td class="sticky-col col-total col-yellow sticky-last-col text-bold" data-sticky-idx="1">${formatSeconds(typ.total)}</td>`;
@@ -560,6 +699,109 @@ function getMonthYearBR(dateStr) {
     return `${months[d.getMonth()]}, ${d.getFullYear()}`;
 }
 
+// ================= EXPORTAÇÃO EXCEL (.XLSX) E PDF =================
+window.exportToExcel = function() {
+    if (typeof XLSX === 'undefined') {
+        alert("Biblioteca de Excel não carregada. Verifique sua conexão com a internet.");
+        return;
+    }
+    if (currentWorklogs.length === 0) {
+        alert("Nenhum dado para exportar.");
+        return;
+    }
+
+    const wb = XLSX.utils.book_new();
+
+    // Aba 1: Resumo por Issue / Dia
+    const issueMap = {};
+    let grandTotalSec = 0;
+    const dayTotals = {};
+    currentDates.forEach(d => dayTotals[d] = 0);
+
+    currentWorklogs.forEach(wl => {
+        if (!issueMap[wl.issueKey]) {
+            const daily = {};
+            currentDates.forEach(d => daily[d] = 0);
+            issueMap[wl.issueKey] = {
+                type: wl.type,
+                parentKey: wl.parentKey || "",
+                issueKey: wl.issueKey,
+                summary: wl.summary,
+                total: 0,
+                daily
+            };
+        }
+        if (issueMap[wl.issueKey].daily[wl.date] !== undefined) {
+            issueMap[wl.issueKey].daily[wl.date] += wl.sec;
+            dayTotals[wl.date] += wl.sec;
+        }
+        issueMap[wl.issueKey].total += wl.sec;
+        grandTotalSec += wl.sec;
+    });
+
+    const summaryHeaders = [
+        "Tipo de item", "ERP Pai", "Issue", "Descrição", "Total",
+        ...currentDates.map(d => d.split('-').reverse().join('/'))
+    ];
+    const summaryRows = [summaryHeaders];
+
+    Object.values(issueMap)
+        .sort((a, b) => a.type.localeCompare(b.type) || a.issueKey.localeCompare(b.issueKey))
+        .forEach(item => {
+            summaryRows.push([
+                item.type,
+                item.parentKey,
+                item.issueKey,
+                item.summary,
+                formatSeconds(item.total),
+                ...currentDates.map(d => formatSeconds(item.daily[d]))
+            ]);
+        });
+
+    summaryRows.push([
+        "TOTAL GERAL", "", "", "", formatSeconds(grandTotalSec),
+        ...currentDates.map(d => formatSeconds(dayTotals[d]))
+    ]);
+
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+    XLSX.utils.book_append_sheet(wb, wsSummary, "Resumo");
+
+    // Aba 2: Detalhamento de todos os apontamentos
+    const detailRows = [["Data", "Início", "Fim", "Tipo", "ERP Pai", "Issue", "Descrição", "Tempo", "Comentário"]];
+    const sortedWls = [...currentWorklogs].sort((a, b) => new Date(a.started) - new Date(b.started));
+
+    sortedWls.forEach(wl => {
+        const startDate = new Date(wl.started);
+        const endDate = new Date(startDate.getTime() + (wl.sec * 1000));
+        detailRows.push([
+            startDate.toLocaleDateString('pt-BR'),
+            startDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+            endDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+            wl.type,
+            wl.parentKey || "",
+            wl.issueKey,
+            wl.summary,
+            wl.timeSpent,
+            wl.comment
+        ]);
+    });
+
+    const wsDetails = XLSX.utils.aoa_to_sheet(detailRows);
+    XLSX.utils.book_append_sheet(wb, wsDetails, "Detalhamento");
+
+    const safeName = (currentHeaderMeta.displayName || "Worklog").replace(/[^a-zA-Z0-9]/g, "_");
+    const fileName = `Worklog_${safeName}_${currentHeaderMeta.fromStr}_a_${currentHeaderMeta.toStr}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+};
+
+window.exportToPDF = function() {
+    if (currentWorklogs.length === 0) {
+        alert("Nenhum dado para exportar.");
+        return;
+    }
+    window.print();
+};
+
 // ================= LÓGICA DO MODAL =================
 window.openModal = function(issueKey) {
     const worklogs = modalData[issueKey];
@@ -568,28 +810,23 @@ window.openModal = function(issueKey) {
     const issueSummary = worklogs[0].summary;
     const parentKey = worklogs[0].parentKey;
 
-    let titleHtml = '';
+    let keysHtml = '';
     if (parentKey) {
-        titleHtml = `<a href="https://guaranisistemas.atlassian.net/browse/${parentKey}" target="_blank" style="color: #5e6c84; text-decoration: none; font-weight: 500; font-size: 16px;">${parentKey}</a> <span style="color: #97a0af; margin: 0 4px; font-weight: 300;">/</span> `;
+        keysHtml += `<a href="https://guaranisistemas.atlassian.net/browse/${parentKey}" target="_blank" class="modal-parent-badge" title="Abrir Ticket Pai">${parentKey}</a>`;
+        keysHtml += `<span class="modal-breadcrumb-sep">/</span>`;
     }
-    titleHtml += `<a href="https://guaranisistemas.atlassian.net/browse/${issueKey}" target="_blank" style="color: #0052cc; text-decoration: none; font-weight: 600;">${issueKey}</a>`;
+    keysHtml += `<a href="https://guaranisistemas.atlassian.net/browse/${issueKey}" target="_blank" class="modal-issue-link" title="Abrir Ticket">${issueKey}</a>`;
 
     document.getElementById('modalTitle').innerHTML = `
-        <div style="display: flex; flex-direction: column; gap: 6px;">
-            <div style="display: flex; align-items: center; font-size: 20px; line-height: 1.2;">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0052cc" stroke-width="2" style="margin-right: 10px; flex-shrink: 0;">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                    <polyline points="15 3 21 3 21 9"></polyline>
-                    <line x1="10" y1="14" x2="21" y2="3"></line>
-                </svg>
-                <div style="display: flex; align-items: center; flex-wrap: wrap;">
-                    ${titleHtml}
-                </div>
-            </div>
-            <div style="font-size: 14px; color: #5e6c84; font-weight: normal; margin-left: 32px; line-height: 1.4;">
-                ${issueSummary}
-            </div>
+        <div class="modal-title-row">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0052cc" stroke-width="2.2" style="flex-shrink: 0;">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <line x1="10" y1="14" x2="21" y2="3"></line>
+            </svg>
+            <div class="modal-keys-group">${keysHtml}</div>
         </div>
+        <div class="modal-summary-highlight">${issueSummary}</div>
     `;
     
     const tbody = document.getElementById('modalTableBody');
@@ -638,31 +875,16 @@ window.openModal = function(issueKey) {
     modal.style.display = 'flex';
     modal.style.justifyContent = 'center';
     modal.style.alignItems = 'flex-start';
-    modal.style.paddingTop = '10vh';
-
-    const modalContent = document.querySelector('.modal-content');
-    if (modalContent) {
-        modalContent.style.margin = '0'; 
-        modalContent.style.maxHeight = '80vh';
-        modalContent.style.display = 'grid';
-        modalContent.style.gridTemplateRows = 'auto 1fr';
-        modalContent.style.overflow = 'hidden'; 
-    }
-
-    const modalBody = document.querySelector('.modal-body');
-    if (modalBody) {
-        modalBody.style.overflowY = 'auto';
-        modalBody.style.paddingRight = '4px';
-    }
-}
+    modal.style.paddingTop = '8vh';
+};
 
 window.closeModal = function() {
     document.getElementById('worklogModal').style.display = 'none';
-}
+};
 
 window.onclick = function(event) {
     const modal = document.getElementById('worklogModal');
     if (event.target === modal) {
         modal.style.display = 'none';
     }
-}
+};
