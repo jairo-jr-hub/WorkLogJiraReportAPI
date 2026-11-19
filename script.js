@@ -1,5 +1,5 @@
 // ================= CONFIGURAÇÃO DA API =================
-const WORKER_URL = "https://SEU-WORKER.SEU-SUBDOMINIO.workers.dev";
+const WORKER_URL = "https://jira-worklog-proxy.jairo-juniorjj15.workers.dev";
 
 let globalIssuesData = [];
 let activeGroups = ['tipo', 'issue'];
