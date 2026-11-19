@@ -4,7 +4,9 @@ const WORKER_URL = "https://jira-worklog-proxy.jairo-juniorjj15.workers.dev";
 // Lista de usuários rápidos (adicione quantos quiser aqui)
 const SAVED_USERS = [
     "Jairo Antonio dos Santos Junior",
-    "Lucas Vieira de Oliveira"
+    "Lucas Vieira de Oliveira",
+    "Jeferson Lima",
+    "Lucas Daniel Oliveira Sousa"
 ];
 
 let globalIssuesData = [];
